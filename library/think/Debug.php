@@ -59,7 +59,7 @@ class Debug
      */
     public static function getUseTime($dec = 6)
     {
-        return number_format((microtime(true) - THINK_START_TIME), $dec);
+        return number_format((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']), $dec);
     }
 
     /**

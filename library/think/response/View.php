@@ -15,13 +15,16 @@ use think\Config;
 use think\Response;
 use think\View as ViewTemplate;
 
-class View extends Response
+class View
 {
     // 输出参数
-    protected $options     = [];
+    public    $options     = [];
     protected $vars        = [];
     protected $replace     = [];
-    protected $contentType = 'text/html';
+    public    $contentType = 'text/html';
+
+    /** @var string 模版文件名，默认使用控制器/方法同名模版 */
+    protected $template = '';
 
     /**
      * 处理数据
@@ -29,11 +32,24 @@ class View extends Response
      * @param mixed $data 要处理的数据
      * @return mixed
      */
-    protected function output($data)
+    public function output ($data)
     {
+        $this->assign($data);
+
         // 渲染模板输出
         return ViewTemplate::instance(Config::get('template'), Config::get('view_replace_str'))
-            ->fetch($data, $this->vars, $this->replace);
+            ->fetch($this->template, $this->vars, $this->replace);
+    }
+
+    /**
+     * 设置模版名称
+     * @param string $template
+     */
+    public function template ($template)
+    {
+        $this->template = $template;
+
+        return Response::instance();
     }
 
     /**
@@ -42,12 +58,12 @@ class View extends Response
      * @param string $name 模板变量
      * @return mixed
      */
-    public function getVars($name = null)
+    public function getVars ($name = NULL)
     {
         if (is_null($name)) {
             return $this->vars;
         } else {
-            return isset($this->vars[$name]) ? $this->vars[$name] : null;
+            return isset($this->vars[$name]) ? $this->vars[$name] : NULL;
         }
     }
 
@@ -56,34 +72,37 @@ class View extends Response
      * @access public
      * @param mixed $name  变量名
      * @param mixed $value 变量值
-     * @return $this
+     * @return Response
      */
-    public function assign($name, $value = '')
+    public function assign ($name, $value = '')
     {
         if (is_array($name)) {
             $this->vars = array_merge($this->vars, $name);
-            return $this;
+
+            return Response::instance();
         } else {
             $this->vars[$name] = $value;
         }
-        return $this;
+
+        return Response::instance();
     }
 
     /**
      * 视图内容替换
      * @access public
      * @param string|array $content 被替换内容（支持批量替换）
-     * @param string  $replace    替换内容
-     * @return $this
+     * @param string       $replace 替换内容
+     * @return Response
      */
-    public function replace($content, $replace = '')
+    public function replace ($content, $replace = '')
     {
         if (is_array($content)) {
             $this->replace = array_merge($this->replace, $content);
         } else {
             $this->replace[$content] = $replace;
         }
-        return $this;
+
+        return Response::instance();
     }
 
 }

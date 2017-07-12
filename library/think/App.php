@@ -27,6 +27,11 @@ class App
     protected static $init = false;
 
     /**
+     * @var bool 是否处于swoole模式
+     */
+    public static $swoole = false;
+
+    /**
      * @var string 当前模块路径
      */
     public static $modulePath;
@@ -159,13 +164,8 @@ class App
         // 输出数据到客户端
         if ($data instanceof Response) {
             $response = $data;
-        } elseif (!is_null($data)) {
-            // 默认自动识别响应输出类型
-            $isAjax   = $request->isAjax();
-            $type     = $isAjax ? Config::get('default_ajax_return') : Config::get('default_return_type');
-            $response = Response::create($data, $type);
         } else {
-            $response = Response::create();
+            $response = Response::create($data);
         }
 
         // 监听app_end
@@ -454,51 +454,39 @@ class App
         // 定位模块目录
         $module = $module ? $module . DS : '';
 
-        // 加载初始化文件
-        if (is_file(APP_PATH . $module . 'init' . EXT)) {
-            include APP_PATH . $module . 'init' . EXT;
-        } elseif (is_file(RUNTIME_PATH . $module . 'init' . EXT)) {
-            include RUNTIME_PATH . $module . 'init' . EXT;
-        } else {
-            $path = APP_PATH . $module;
-            // 加载模块配置
-            $config = Config::load(CONF_PATH . $module . 'config' . CONF_EXT);
-            // 读取数据库配置文件
-            $filename = CONF_PATH . $module . 'database' . CONF_EXT;
-            Config::load($filename, 'database');
-            // 读取扩展配置文件
-            if (is_dir(CONF_PATH . $module . 'extra')) {
-                $dir   = CONF_PATH . $module . 'extra';
-                $files = scandir($dir);
-                foreach ($files as $file) {
-                    if (strpos($file, CONF_EXT)) {
-                        $filename = $dir . DS . $file;
-                        Config::load($filename, pathinfo($file, PATHINFO_FILENAME));
-                    }
-                }
+        $path = APP_PATH . $module;
+        // 公应用初始化时才加载基本配置文件
+        if (!$module) {
+            if (!ENVIRON || !is_file(ENVIRON_CONF_PATH . 'config' . CONF_EXT)) {
+                throw new \InvalidArgumentException('配置文件读取错误，请确认环境状态或配置文件是否存在: ' . ENVIRON_CONF_PATH . 'config' . CONF_EXT);
             }
-
-            // 加载应用状态配置
-            if ($config['app_status']) {
-                $config = Config::load(CONF_PATH . $module . $config['app_status'] . CONF_EXT);
-            }
-
-            // 加载行为扩展文件
-            if (is_file(CONF_PATH . $module . 'tags' . EXT)) {
-                Hook::import(include CONF_PATH . $module . 'tags' . EXT);
-            }
-
-            // 加载公共文件
-            if (is_file($path . 'common' . EXT)) {
-                include $path . 'common' . EXT;
-            }
-
-            // 加载当前模块语言包
-            if ($module) {
-                Lang::load($path . 'lang' . DS . Request::instance()->langset() . EXT);
-            }
+            Config::set(include ENVIRON_CONF_PATH . 'config' . CONF_EXT);
         }
-        return Config::get();
+
+        // 绑定模块，且是初始模块，那直接跳过，可以在环境配置文件里禁用从缓存读取配置
+        if (!(defined('BIND_MODULE') && $module) && !Config::get('disable_config_from_cache')) {
+            $cache = defined('BIND_MODULE') ? BIND_MODULE : ($module ? rtrim($module, DS) : 'common');
+            $cache = \core\Tool::cache('config.' . $cache);
+
+            //递归设置已存在的数据配置项
+            foreach ($cache['recursive'] AS $name => $value) {
+                Config::set($name, $value);
+            }
+
+            //直接合并普通配置项
+            Config::set($cache['default']);
+
+            //注册勾子
+            Hook::import($cache['event']);
+            unset($cache);
+        }
+        $config = Config::get();
+
+        // 加载当前模块语言包
+        if ($module) {
+            Lang::load($path . 'lang' . DS . Request::instance()->langset() . EXT);
+        }
+        return $config;
     }
 
     /**

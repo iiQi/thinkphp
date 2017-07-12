@@ -12,18 +12,17 @@
 namespace think\response;
 
 use think\Request;
-use think\Response;
 
-class Jsonp extends Response
+class Jsonp
 {
     // 输出参数
-    protected $options = [
+    public $options = [
         'var_jsonp_handler'     => 'callback',
         'default_jsonp_handler' => 'jsonpReturn',
         'json_encode_param'     => JSON_UNESCAPED_UNICODE,
     ];
 
-    protected $contentType = 'application/javascript';
+    public $contentType = 'application/javascript';
 
     /**
      * 处理数据
@@ -32,7 +31,7 @@ class Jsonp extends Response
      * @return mixed
      * @throws \Exception
      */
-    protected function output($data)
+    public function output ($data)
     {
         try {
             // 返回JSON数据格式到客户端 包含状态信息 [当url_common_param为false时是无法获取到$_GET的数据的，故使用Request来获取<xiaobo.sun@qq.com>]
@@ -46,6 +45,7 @@ class Jsonp extends Response
             }
 
             $data = $handler . '(' . $data . ');';
+
             return $data;
         } catch (\Exception $e) {
             if ($e->getPrevious()) {

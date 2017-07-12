@@ -91,6 +91,38 @@ class Log
     }
 
     /**
+     * 记录集合式的日志信息
+     * @param string       $name    集合名称
+     * @param array|string $data    数据
+     * @param bool         $multi   是否使用多记录模式
+     *                              设置为 true，会将数据作为一条独立记录
+     *                              设置为 false，会将数据合并到相同集合名称里
+     */
+    public static function gather ($name, $data, $multi = false)
+    {
+        if (strpos($name, ':')) {
+            list($name, $key) = explode(':', $name, 2);
+        }
+        if ($multi) {
+            $data = [$data];
+        }
+
+        if (!isset(self::$log['gather'][$name])) {
+            self::$log['gather'][$name] = [];
+        }
+
+        if (isset($key)) {
+            if (!isset(self::$log['gather'][$name][$key])) {
+                self::$log['gather'][$name][$key] = $data;
+            } else {
+                self::$log['gather'][$name][$key] = array_merge(self::$log['gather'][$name][$key], $data);
+            }
+        } else {
+            self::$log['gather'][$name] = array_merge(self::$log['gather'][$name], $data);
+        }
+    }
+
+    /**
      * 清空日志信息
      * @return void
      */

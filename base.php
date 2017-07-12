@@ -10,7 +10,6 @@
 // +----------------------------------------------------------------------
 
 define('THINK_VERSION', '5.0.6');
-define('THINK_START_TIME', microtime(true));
 define('THINK_START_MEM', memory_get_usage());
 define('EXT', '.php');
 define('DS', DIRECTORY_SEPARATOR);
@@ -20,38 +19,32 @@ define('CORE_PATH', LIB_PATH . 'think' . DS);
 define('TRAIT_PATH', LIB_PATH . 'traits' . DS);
 defined('APP_PATH') or define('APP_PATH', dirname($_SERVER['SCRIPT_FILENAME']) . DS);
 defined('ROOT_PATH') or define('ROOT_PATH', dirname(realpath(APP_PATH)) . DS);
-defined('EXTEND_PATH') or define('EXTEND_PATH', ROOT_PATH . 'extend' . DS);
+defined('EXTEND_PATH') or define('EXTEND_PATH', ROOT_PATH . 'vendor' . DS);
 defined('VENDOR_PATH') or define('VENDOR_PATH', ROOT_PATH . 'vendor' . DS);
-defined('RUNTIME_PATH') or define('RUNTIME_PATH', ROOT_PATH . 'runtime' . DS);
+//环境状态(服务器设置的env优先，其次获取php.ini)，将配置里的 . \ / 去掉
+defined('ENVIRON') or define('ENVIRON', str_replace(['.', '\\', '/'], '', getenv('WEB_RUN_ENVIRON') ?: get_cfg_var('WEB_RUN_ENVIRON')));
+defined('RUNTIME_PATH') or define('RUNTIME_PATH',
+    get_cfg_var('WEB_RUN_RUNTIME_DIR') && getenv('WEB_RUN_NAME') ?  // php.ini里有配置 RUNTIME 目录 且 nginx 里配置了 WEB_RUN_NAME，那使用独立的 RUNTIME 目录
+        get_cfg_var('WEB_RUN_RUNTIME_DIR') . DS . getenv('WEB_RUN_NAME') . DS . ENVIRON . DS:
+        ROOT_PATH . 'runtime' . DS);
 defined('LOG_PATH') or define('LOG_PATH', RUNTIME_PATH . 'log' . DS);
 defined('CACHE_PATH') or define('CACHE_PATH', RUNTIME_PATH . 'cache' . DS);
 defined('TEMP_PATH') or define('TEMP_PATH', RUNTIME_PATH . 'temp' . DS);
-defined('CONF_PATH') or define('CONF_PATH', APP_PATH); // 配置文件目录
+defined('CONF_PATH') or define('CONF_PATH', ROOT_PATH . 'conf' . DS); // 配置文件目录
 defined('CONF_EXT') or define('CONF_EXT', EXT); // 配置文件后缀
 defined('ENV_PREFIX') or define('ENV_PREFIX', 'PHP_'); // 环境变量的配置前缀
+//根据环境状态定义环境配置文件目录
+defined('ENVIRON_CONF_PATH') or define('ENVIRON_CONF_PATH',
+    (getenv('WEB_RUN_NAME') ? get_cfg_var('WEB_RUN_CONF_DIR') . DS . getenv('WEB_RUN_NAME') . DS : CONF_PATH)
+    . ENVIRON . DS
+);
 
 // 环境常量
-define('IS_CLI', PHP_SAPI == 'cli' ? true : false);
+defined('IS_CLI') or define('IS_CLI', PHP_SAPI == 'cli' ? true : false);
 define('IS_WIN', strpos(PHP_OS, 'WIN') !== false);
 
 // 载入Loader类
 require CORE_PATH . 'Loader.php';
-
-// 加载环境变量配置文件
-if (is_file(ROOT_PATH . '.env')) {
-    $env = parse_ini_file(ROOT_PATH . '.env', true);
-    foreach ($env as $key => $val) {
-        $name = ENV_PREFIX . strtoupper($key);
-        if (is_array($val)) {
-            foreach ($val as $k => $v) {
-                $item = $name . '_' . strtoupper($k);
-                putenv("$item=$v");
-            }
-        } else {
-            putenv("$name=$val");
-        }
-    }
-}
 
 // 注册自动加载
 \think\Loader::register();

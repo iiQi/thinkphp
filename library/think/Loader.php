@@ -56,6 +56,8 @@ class Loader
             }
 
             __include_file($file);
+            // 监听autoload
+            Hook::listen('autoload', $class);
             return true;
         }
     }

@@ -16,18 +16,19 @@ use think\Response;
 use think\Session;
 use think\Url;
 
-class Redirect extends Response
+class Redirect
 {
 
-    protected $options = [];
+    public $options = [];
 
     // URL参数
     protected $params = [];
 
-    public function __construct($data = '', $code = 302, array $header = [], array $options = [])
+    protected $data;
+
+    public function __construct ($data = '', $code = 302, array $header = [], array $options = [])
     {
-        parent::__construct($data, $code, $header, $options);
-        $this->cacheControl('no-cache,must-revalidate');
+        Response::instance()->cacheControl('no-cache,must-revalidate');
     }
 
     /**
@@ -36,20 +37,22 @@ class Redirect extends Response
      * @param mixed $data 要处理的数据
      * @return mixed
      */
-    protected function output($data)
+    public function output ($data)
     {
-        $this->header['Location'] = $this->getTargetUrl();
+        $this->data = $data;
+        Response::instance()->header('Location', $this->getTargetUrl());
+
         return;
     }
 
     /**
      * 重定向传值（通过Session）
      * @access protected
-     * @param string|array  $name 变量名或者数组
-     * @param mixed         $value 值
-     * @return $this
+     * @param string|array $name  变量名或者数组
+     * @param mixed        $value 值
+     * @return Response
      */
-    public function with($name, $value = null)
+    public function with ($name, $value = NULL)
     {
         if (is_array($name)) {
             foreach ($name as $key => $val) {
@@ -58,44 +61,42 @@ class Redirect extends Response
         } else {
             Session::flash($name, $value);
         }
-        return $this;
+
+        return Response::instance();
     }
 
     /**
      * 获取跳转地址
      * @return string
      */
-    public function getTargetUrl()
+    public function getTargetUrl ()
     {
         return (strpos($this->data, '://') || 0 === strpos($this->data, '/')) ? $this->data : Url::build($this->data, $this->params);
     }
 
-    public function params($params = [])
+    public function params ($params = [])
     {
         $this->params = $params;
-        return $this;
+
+        return Response::instance();
     }
 
     /**
      * 记住当前url后跳转
-     * @return $this
      */
-    public function remember()
+    public function remember ()
     {
         Session::set('redirect_url', Request::instance()->url());
-        return $this;
     }
 
     /**
      * 跳转到上次记住的url
-     * @return $this
      */
-    public function restore()
+    public function restore ()
     {
         if (Session::has('redirect_url')) {
             $this->data = Session::get('redirect_url');
             Session::delete('redirect_url');
         }
-        return $this;
     }
 }

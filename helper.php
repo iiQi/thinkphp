@@ -533,7 +533,7 @@ if (!function_exists('halt')) {
     function halt($var)
     {
         dump($var);
-        throw new HttpResponseException(new Response);
+		throw new HttpResponseException(Response::instance());
     }
 }
 

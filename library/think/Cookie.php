@@ -94,7 +94,7 @@ class Cookie
         }
         $expire = !empty($config['expire']) ? $_SERVER['REQUEST_TIME'] + intval($config['expire']) : 0;
         if ($config['setcookie']) {
-            setcookie($name, $value, $expire, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
+			self::setcookie($name, $value, $expire, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
         }
         $_COOKIE[$name] = $value;
     }
@@ -149,7 +149,7 @@ class Cookie
             }
             return $value;
         } else {
-            return;
+            return null;
         }
     }
 
@@ -166,7 +166,7 @@ class Cookie
         $prefix = !is_null($prefix) ? $prefix : $config['prefix'];
         $name   = $prefix . $name;
         if ($config['setcookie']) {
-            setcookie($name, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
+			self::setcookie($name, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
         }
         // 删除指定cookie
         unset($_COOKIE[$name]);
@@ -192,7 +192,7 @@ class Cookie
             foreach ($_COOKIE as $key => $val) {
                 if (0 === strpos($key, $prefix)) {
                     if ($config['setcookie']) {
-                        setcookie($key, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
+                        self::setcookie($key, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'], $config['domain'], $config['secure'], $config['httponly']);
                     }
                     unset($_COOKIE[$key]);
                 }
@@ -208,4 +208,10 @@ class Cookie
         }
     }
 
+    private static function setcookie ($name, $value = null, $expire = null, $path = null, $domain = null, $secure = null, $httponly = null) {
+		return call_user_func(
+			App::$swoole ? [\core\server\Worker::$response, 'cookie'] : 'setcookie'
+			, $name, $value, $expire, $path, $domain, $secure, $httponly
+		);
+	}
 }

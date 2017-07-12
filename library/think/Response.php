@@ -11,14 +11,39 @@
 
 namespace think;
 
-use think\response\Json as JsonResponse;
-use think\response\Jsonp as JsonpResponse;
-use think\response\Redirect as RedirectResponse;
-use think\response\View as ViewResponse;
-use think\response\Xml as XmlResponse;
+use think\Cache;
+use think\Config;
+use think\Debug;
+use think\Env;
+use think\response\Redirect;
+use think\response\View;
 
+/**
+ * @package think
+ * @method Redirect with(string | array $name, mixed $value = NULL) 重定向传值（通过Session）
+ * @method string getTargetUrl() 获取跳转地址
+ * @method Redirect params(array $params = []) 跳转地址为 <b>相对</b> 地址时，设置跳转的参数
+ * @method remember() 记住当前url后跳转
+ * @method restore() 跳转到上次记住的url
+ * @method View template(string $template) 指定模版名称
+ * @method getVars(string $name = NULL) 获取视图变量
+ * @method View assign(string | array $name, $value = '') 获取视图变量
+ * @method View replace(string | array $content, $replace = '') 视图内容替换
+ **/
 class Response
 {
+    /**
+     * @var \think\Response 对象实例
+     */
+    protected static $instance;
+
+    /**
+     * @var string 输出类型，为空是自动获取，可指定：json|jsonp|xml
+     */
+    protected $type = NULL;
+
+    /** @var  object 扩展方法的操作句柄 */
+    protected $handler;
 
     // 原始数据
     protected $data;
@@ -37,17 +62,17 @@ class Response
     // header参数
     protected $header = [];
 
-    protected $content = null;
+    protected $content = NULL;
 
     /**
-     * 架构函数
+     * 构造函数
      * @access   public
      * @param mixed $data    输出数据
      * @param int   $code
      * @param array $header
      * @param array $options 输出参数
      */
-    public function __construct($data = '', $code = 200, array $header = [], $options = [])
+    public function __construct ($data = '', $code = 200, array $header = [], $options = [])
     {
         $this->data($data);
         $this->header = $header;
@@ -55,8 +80,23 @@ class Response
         if (!empty($options)) {
             $this->options = array_merge($this->options, $options);
         }
-        $this->contentType($this->contentType, $this->charset);
     }
+
+    /**
+     * 初始化
+     * @access public
+     * @param array $options 参数
+     * @return \think\Response
+     */
+    public static function instance ()
+    {
+        if (is_null(self::$instance)) {
+            self::$instance = new static();
+        }
+
+        return self::$instance;
+    }
+
 
     /**
      * 创建Response对象
@@ -66,20 +106,19 @@ class Response
      * @param int    $code
      * @param array  $header
      * @param array  $options 输出参数
-     * @return Response|JsonResponse|ViewResponse|XmlResponse|RedirectResponse|JsonpResponse
+     * @return \think\Response
      */
-    public static function create($data = '', $type = '', $code = 200, array $header = [], $options = [])
+    public static function create ($data = '', $type = '', $code = 0, array $header = [], $options = [])
     {
-        $type = empty($type) ? 'null' : strtolower($type);
+        $instance = static::instance();
 
-        $class = false !== strpos($type, '\\') ? $type : '\\think\\response\\' . ucfirst($type);
-        if (class_exists($class)) {
-            $response = new $class($data, $code, $header, $options);
-        } else {
-            $response = new static($data, $code, $header, $options);
-        }
+        $instance->data($data)
+            ->type($type ?: $instance->getType())
+            ->code($code ?: $instance->getCode())
+            ->header($header)
+            ->options($options);
 
-        return $response;
+        return $instance;
     }
 
     /**
@@ -88,7 +127,7 @@ class Response
      * @return mixed
      * @throws \InvalidArgumentException
      */
-    public function send()
+    public function send ()
     {
         // 处理输出数据
         $data = $this->getContent();
@@ -128,8 +167,22 @@ class Response
         Hook::listen('response_end', $this);
 
         // 清空当次请求有效的数据
-        if (!($this instanceof RedirectResponse)) {
-            Session::flush();
+        Session::flush();
+    }
+
+    /**
+     * 根据页面处理类型调用扩展方法
+     * @param $method
+     * @param $arguments
+     * @return mixed
+     * @throws Exception
+     */
+    public function __call ($method, $arguments)
+    {
+        if (method_exists($this->handler, $method)) {
+            return call_user_func_array([$this->handler, $method], $arguments);
+        } else {
+            throw new Exception('method not exists:' . __CLASS__ . '->' . $method);
         }
     }
 
@@ -139,8 +192,18 @@ class Response
      * @param mixed $data 要处理的数据
      * @return mixed
      */
-    protected function output($data)
+    protected function output ($data)
     {
+        if ($this->handler !== false && method_exists($this->handler, 'output')) {
+            //将先选项传递过去
+            $this->handler->options = array_merge($this->handler->options, $this->options);
+            $data                   = call_user_func_array([$this->handler, 'output'], [$data]);
+        }
+        //没有设置有效的数据处理方式，且数据为数组时，转成字符串
+        elseif (is_array($data)) {
+            $data = var_export($data, true);
+        }
+
         return $data;
     }
 
@@ -150,9 +213,10 @@ class Response
      * @param mixed $options 输出参数
      * @return $this
      */
-    public function options($options = [])
+    public function options ($options = [])
     {
         $this->options = array_merge($this->options, $options);
+
         return $this;
     }
 
@@ -162,9 +226,10 @@ class Response
      * @param mixed $data 输出数据
      * @return $this
      */
-    public function data($data)
+    public function data ($data)
     {
         $this->data = $data;
+
         return $this;
     }
 
@@ -175,13 +240,14 @@ class Response
      * @param string       $value 参数值
      * @return $this
      */
-    public function header($name, $value = null)
+    public function header ($name, $value = NULL)
     {
         if (is_array($name)) {
             $this->header = array_merge($this->header, $name);
         } else {
             $this->header[$name] = $value;
         }
+
         return $this;
     }
 
@@ -190,17 +256,61 @@ class Response
      * @param $content
      * @return $this
      */
-    public function content($content)
+    public function content ($content)
     {
-        if (null !== $content && !is_string($content) && !is_numeric($content) && !is_callable([
-            $content,
-            '__toString',
-        ])
+        if (NULL !== $content && !is_string($content) && !is_numeric($content) && !is_callable([
+                $content,
+                '__toString',
+            ])
         ) {
             throw new \InvalidArgumentException(sprintf('variable type error： %s', gettype($content)));
         }
 
-        $this->content = (string) $content;
+        $this->content = (string)$content;
+
+        return $this;
+    }
+
+    /**
+     * 获取页面返回类型
+     * @param string $type
+     * @return string
+     */
+    public function getType ()
+    {
+        if (is_null($this->type)) {
+            return Request::instance()->isAjax() ? Config::get('default_ajax_return') : Config::get('default_return_type');
+        } else {
+            return $this->type;
+        }
+    }
+
+    /**
+     * 设置页面返回类型
+     * @param $type
+     * @return $this
+     */
+    public function type ($type)
+    {
+        // 返回类型没有改变时，直接返回，避免多次运算
+        if ($type == $this->type) {
+            return $this;
+        }
+        $this->type  = $type;
+        $contentType = $this->contentType;
+        // 载入类型相关的类，便于扩展方法
+        $type  = $this->getType();
+        $class = false !== strpos($type, '\\') ? $type : '\\think\\response\\' . ucfirst($type);
+        if (class_exists($class)) {
+            $this->handler = new $class;
+            //配置有内容类型
+            if (isset($this->handler->contentType)) {
+                $contentType = $this->handler->contentType;
+            }
+        } else {
+            $this->handler = false;
+        }
+        $this->contentType($contentType);
 
         return $this;
     }
@@ -210,9 +320,10 @@ class Response
      * @param integer $code 状态码
      * @return $this
      */
-    public function code($code)
+    public function code ($code)
     {
         $this->code = $code;
+
         return $this;
     }
 
@@ -221,9 +332,10 @@ class Response
      * @param string $time
      * @return $this
      */
-    public function lastModified($time)
+    public function lastModified ($time)
     {
         $this->header['Last-Modified'] = $time;
+
         return $this;
     }
 
@@ -232,9 +344,10 @@ class Response
      * @param string $time
      * @return $this
      */
-    public function expires($time)
+    public function expires ($time)
     {
         $this->header['Expires'] = $time;
+
         return $this;
     }
 
@@ -243,9 +356,10 @@ class Response
      * @param string $eTag
      * @return $this
      */
-    public function eTag($eTag)
+    public function eTag ($eTag)
     {
         $this->header['ETag'] = $eTag;
+
         return $this;
     }
 
@@ -254,9 +368,10 @@ class Response
      * @param string $cache 状态码
      * @return $this
      */
-    public function cacheControl($cache)
+    public function cacheControl ($cache)
     {
         $this->header['Cache-control'] = $cache;
+
         return $this;
     }
 
@@ -266,9 +381,10 @@ class Response
      * @param string $charset     输出编码
      * @return $this
      */
-    public function contentType($contentType, $charset = 'utf-8')
+    public function contentType ($contentType, $charset = 'utf-8')
     {
         $this->header['Content-Type'] = $contentType . '; charset=' . $charset;
+
         return $this;
     }
 
@@ -277,10 +393,10 @@ class Response
      * @param string $name 头部名称
      * @return mixed
      */
-    public function getHeader($name = '')
+    public function getHeader ($name = '')
     {
         if (!empty($name)) {
-            return isset($this->header[$name]) ? $this->header[$name] : null;
+            return isset($this->header[$name]) ? $this->header[$name] : NULL;
         } else {
             return $this->header;
         }
@@ -290,7 +406,7 @@ class Response
      * 获取原始数据
      * @return mixed
      */
-    public function getData()
+    public function getData ()
     {
         return $this->data;
     }
@@ -299,21 +415,22 @@ class Response
      * 获取输出数据
      * @return mixed
      */
-    public function getContent()
+    public function getContent ()
     {
-        if (null == $this->content) {
+        if (NULL == $this->content) {
             $content = $this->output($this->data);
 
-            if (null !== $content && !is_string($content) && !is_numeric($content) && !is_callable([
-                $content,
-                '__toString',
-            ])
+            if (NULL !== $content && !is_string($content) && !is_numeric($content) && !is_callable([
+                    $content,
+                    '__toString',
+                ])
             ) {
                 throw new \InvalidArgumentException(sprintf('variable type error： %s', gettype($content)));
             }
 
-            $this->content = (string) $content;
+            $this->content = (string)$content;
         }
+
         return $this->content;
     }
 
@@ -321,7 +438,7 @@ class Response
      * 获取状态码
      * @return integer
      */
-    public function getCode()
+    public function getCode ()
     {
         return $this->code;
     }

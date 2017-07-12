@@ -11,16 +11,14 @@
 
 namespace think\response;
 
-use think\Response;
-
-class Json extends Response
+class Json
 {
     // 输出参数
-    protected $options = [
+    public $options = [
         'json_encode_param' => JSON_UNESCAPED_UNICODE,
     ];
 
-    protected $contentType = 'application/json';
+    public $contentType = 'application/json';
 
     /**
      * 处理数据
@@ -29,9 +27,15 @@ class Json extends Response
      * @return mixed
      * @throws \Exception
      */
-    protected function output($data)
+    public function output ($data)
     {
         try {
+            if (is_string($data)) {
+                $data = [
+                    'errno' => 0,
+                    'msg'   => $data,
+                ];
+            }
             // 返回JSON数据格式到客户端 包含状态信息
             $data = json_encode($data, $this->options['json_encode_param']);
 

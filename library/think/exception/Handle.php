@@ -102,7 +102,9 @@ class Handle
         $status   = $e->getStatusCode();
         $template = Config::get('http_exception_template');
         if (!App::$debug && !empty($template[$status])) {
-            return Response::create($template[$status], 'view', $status)->assign(['e' => $e]);
+            $response = Response::create(['e' => $e], 'view', $status);
+            $response->template($template[$status]);
+            return $response;
         } else {
             return $this->convertExceptionToResponse($e);
         }
@@ -150,6 +152,17 @@ class Handle
             }
         }
 
+        //异常日志
+        Log::gather('base', ['error' => [
+            'code'    => $exception->getCode(),
+            'message' => $exception->getMessage(),
+            'name'    => get_class($exception),
+            'file'    => $exception->getFile(),
+            'line'    => $exception->getLine(),
+            'trace'   => array_slice($exception->getTrace(), 0, -2),
+            'datas'   => $this->getExtendData($exception),
+        ]]);
+
         //保留一层
         while (ob_get_level() > 1) {
             ob_end_clean();
@@ -162,7 +175,7 @@ class Handle
         include Config::get('exception_tmpl');
         // 获取并清空缓存
         $content  = ob_get_clean();
-        $response = new Response($content, 'html');
+        $response = Response::instance()->data($content)->type('html');
 
         if ($exception instanceof HttpException) {
             $statusCode = $exception->getStatusCode();

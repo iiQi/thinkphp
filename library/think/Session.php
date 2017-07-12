@@ -11,12 +11,14 @@
 
 namespace think;
 
+use core\server\Worker;
 use think\exception\ClassNotFoundException;
 
 class Session
 {
-    protected static $prefix = '';
-    protected static $init   = null;
+    protected static $prefix  = '';
+    protected static $init    = NULL;
+    protected static $handler = NULL; //扩展session驱动实例对象
 
     /**
      * 设置或者获取session作用域（前缀）
@@ -59,14 +61,26 @@ class Session
         if (isset($config['prefix'])) {
             self::$prefix = $config['prefix'];
         }
-        if (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
+        if (isset($config['name'])) {
+            session_name($config['name']);
+        }
+
+        // swoole模式下，根据cookie来设置 session_id
+        if (App::$swoole) {
+            $session_name = session_name();
+            if (isset($_COOKIE[$session_name])) {
+                $sessid = $_COOKIE[$session_name];
+            } else {
+                $sessid = uniqid('', true);
+                Worker::$response->cookie($session_name, $sessid, 0, '/');
+            }
+            session_id($sessid);
+        } elseif (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
             session_id($_REQUEST[$config['var_session_id']]);
         } elseif (isset($config['id']) && !empty($config['id'])) {
             session_id($config['id']);
         }
-        if (isset($config['name'])) {
-            session_name($config['name']);
-        }
+
         if (isset($config['path'])) {
             session_save_path($config['path']);
         }
@@ -97,12 +111,12 @@ class Session
             $class = false !== strpos($config['type'], '\\') ? $config['type'] : '\\think\\session\\driver\\' . ucwords($config['type']);
 
             // 检查驱动类
-            if (!class_exists($class) || !session_set_save_handler(new $class($config))) {
+            if (!class_exists($class) || !session_set_save_handler(self::$handler = new $class($config))) {
                 throw new ClassNotFoundException('error session handler:' . $class, $class);
             }
         }
         if ($isDoStart) {
-            session_start();
+            self::session_start();
             self::$init = true;
         } else {
             self::$init = false;
@@ -119,12 +133,24 @@ class Session
             self::init();
         } elseif (false === self::$init) {
             if (PHP_SESSION_ACTIVE != session_status()) {
-                session_start();
+                self::session_start();
             }
             self::$init = true;
         }
     }
 
+    public static function session_start ()
+    {
+        if (App::$swoole) {
+            self::$handler->open('', '');
+            $_SESSION = unserialize(self::$handler->read(session_id()) ?: '');
+            \core\Event::on('shutdown', function () {
+                self::$handler->write(session_id(), serialize($_SESSION));
+            });
+        } else {
+            session_start();
+        }
+    }
     /**
      * session设置
      * @param string        $name session名称
