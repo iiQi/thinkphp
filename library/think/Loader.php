@@ -371,8 +371,9 @@ class Loader
         if (isset(self::$instance[$guid])) {
             return self::$instance[$guid];
         }
-        if (strpos($name, '\\')) {
-            $class = $name;
+        if (false !== strpos($name, '\\')) {
+            $class  = $name;
+            $module = Request::instance()->module();
         } else {
             if (strpos($name, '/')) {
                 list($module, $name) = explode('/', $name, 2);
@@ -406,8 +407,9 @@ class Loader
      */
     public static function controller($name, $layer = 'controller', $appendSuffix = false, $empty = '')
     {
-        if (strpos($name, '\\')) {
-            $class = $name;
+        if (false !== strpos($name, '\\')) {
+            $class  = $name;
+            $module = Request::instance()->module();
         } else {
             if (strpos($name, '/')) {
                 list($module, $name) = explode('/', $name);
@@ -442,8 +444,9 @@ class Loader
         if (isset(self::$instance[$guid])) {
             return self::$instance[$guid];
         }
-        if (strpos($name, '\\')) {
-            $class = $name;
+        if (false !== strpos($name, '\\')) {
+            $class  = $name;
+            $module = Request::instance()->module();
         } else {
             if (strpos($name, '/')) {
                 list($module, $name) = explode('/', $name);

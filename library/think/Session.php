@@ -58,7 +58,7 @@ class Session
             $isDoStart = true;
         }
 
-        if (isset($config['prefix'])) {
+        if (isset($config['prefix']) && (self::$prefix === '' || self::$prefix === null)) {
             self::$prefix = $config['prefix'];
         }
         if (isset($config['name'])) {
