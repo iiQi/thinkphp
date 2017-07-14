@@ -491,7 +491,7 @@ class App
 
             //递归设置已存在的数据配置项
             foreach ($cache['recursive'] AS $name => $value) {
-                Config::set($name, $value);
+                Config::set($value, $name); // name和value反写才是递归合并
             }
 
             //直接合并普通配置项
