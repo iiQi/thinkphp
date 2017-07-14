@@ -11,7 +11,6 @@
 
 namespace think;
 
-use core\server\Worker;
 use think\exception\ClassNotFoundException;
 
 class Session
@@ -61,26 +60,14 @@ class Session
         if (isset($config['prefix']) && (self::$prefix === '' || self::$prefix === null)) {
             self::$prefix = $config['prefix'];
         }
-        if (isset($config['name'])) {
-            session_name($config['name']);
-        }
-
-        // swoole模式下，根据cookie来设置 session_id
-        if (App::$swoole) {
-            $session_name = session_name();
-            if (isset($_COOKIE[$session_name])) {
-                $sessid = $_COOKIE[$session_name];
-            } else {
-                $sessid = uniqid('', true);
-                Worker::$response->cookie($session_name, $sessid, 0, '/');
-            }
-            session_id($sessid);
-        } elseif (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
+        if (isset($config['var_session_id']) && isset($_REQUEST[$config['var_session_id']])) {
             session_id($_REQUEST[$config['var_session_id']]);
         } elseif (isset($config['id']) && !empty($config['id'])) {
             session_id($config['id']);
         }
-
+        if (isset($config['name'])) {
+            session_name($config['name']);
+        }
         if (isset($config['path'])) {
             session_save_path($config['path']);
         }
@@ -114,6 +101,18 @@ class Session
             if (!class_exists($class) || !session_set_save_handler(self::$handler = new $class($config))) {
                 throw new ClassNotFoundException('error session handler:' . $class, $class);
             }
+        }
+
+        // swoole模式下，根据cookie来设置 session_id
+        if (App::$swoole) {
+            $session_name = session_name();
+            if (isset($_COOKIE[$session_name])) {
+                $sessid = $_COOKIE[$session_name];
+            } else {
+                $sessid = uniqid('', true);
+                \core\server\Worker::$response->cookie($session_name, $sessid, 0, '/');
+            }
+            session_id($sessid);
         }
         if ($isDoStart) {
             self::session_start();
