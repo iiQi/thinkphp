@@ -103,17 +103,6 @@ class Session
             }
         }
 
-        // swoole模式下，根据cookie来设置 session_id
-        if (App::$swoole) {
-            $session_name = session_name();
-            if (isset($_COOKIE[$session_name])) {
-                $sessid = $_COOKIE[$session_name];
-            } else {
-                $sessid = uniqid('', true);
-                \core\server\Worker::$response->cookie($session_name, $sessid, 0, '/');
-            }
-            session_id($sessid);
-        }
         if ($isDoStart) {
             self::session_start();
             self::$init = true;
@@ -141,10 +130,30 @@ class Session
     public static function session_start ()
     {
         if (App::$swoole) {
+            // swoole模式下，session_id 获取或生成
+            $session_name = session_name();
+            $var_session_id = Config::get('session.var_session_id');
+            // 从URL获取 session_id
+            if ($var_session_id && isset($_REQUEST[$var_session_id])) {
+                $sessid = $_REQUEST[$var_session_id];
+            }
+            // 从 cookie 获取 session_id
+            elseif (isset($_COOKIE[$session_name])) {
+                $sessid = $_COOKIE[$session_name];
+            }
+            // 生成 session_id
+            else {
+                $sessid = uniqid('', true);
+                $cookieParams = session_get_cookie_params();
+                \core\server\Worker::$response->cookie($session_name, $sessid, time() + $cookieParams['lifetime'], $cookieParams['path'], $cookieParams['domain'], $cookieParams['secure'], $cookieParams['httponly']);
+            }
+            session_id($sessid);
+
             self::$handler->open('', '');
             $_SESSION = unserialize(self::$handler->read(session_id()) ?: '');
             \core\Event::on('shutdown', function () {
                 self::$handler->write(session_id(), serialize($_SESSION));
+                self::$init = false; // 重置启动状态，下次请求时才会执行 session_start
             });
         } else {
             session_start();

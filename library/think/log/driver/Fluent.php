@@ -83,6 +83,7 @@ class Fluent {
 			stream_set_timeout($this->handler, $this->config['timeout']);
 		} catch (\Exception $e) {
 			$this->handler = NULL;
+			is_dir($this->config['path']) || mkdir($this->config['path'], 0755, true);
 			//保存一个 fluent 错误日志
 			error_log('[' . $_SERVER['REQUEST_TIME_FLOAT'] . '] ' . $e->getMessage() . "\r\n", 3, $this->config['path'] . 'error.log');
 		}
@@ -239,13 +240,16 @@ class Fluent {
 
 		$gather = $log['gather'] ?? [];
 		unset($log['gather']);
-		//将TP核心日志转为数据集
-		$gather['debug'] = [
-			'url' => $url,
-		];
-		foreach ($log AS $type => $item) {
-			$gather['debug'][$type] = $item;
-		}
+
+		if ($log) {
+            //将TP核心日志转为数据集
+            $gather['debug'] = [
+                'url' => $url,
+            ];
+            foreach ($log AS $type => $item) {
+                $gather['debug'][$type] = $item;
+            }
+        }
 
 		$httpCode     = $response->getCode();
 		$this->uniqid = md5(uniqid('', true) . mt_rand());
